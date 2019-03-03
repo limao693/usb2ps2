@@ -24,6 +24,6 @@ The company or host device does not have a usb interface and can only use the PS
 2. Use the IDE to brush usb2ps2.ino
 
 ## reference document
-1. [USB HID to PS/2 Scan Code Translation Table] (https://download.microsoft.com/download/1/6/1/161ba512-40e2-4cc9-843a-923143f3456c/translate.pdf)
-2. [PS2 Keyboard Interface Description] (http://www.burtonsys.com/ps2_chapweske.htm)
-3. [Analog PS/2 Keyboard] (https://www.arduino.cn/thread-77766-1-1.html)
+1. [USB HID to PS/2 Scan Code Translation Table](https://download.microsoft.com/download/1/6/1/161ba512-40e2-4cc9-843a-923143f3456c/translate.pdf)
+2. [PS2 Keyboard Interface Description](http://www.burtonsys.com/ps2_chapweske.htm)
+3. [Analog PS/2 Keyboard](https://www.arduino.cn/thread-77766-1-1.html)
