@@ -58,9 +58,16 @@
 #define bmCAPSLOCK      0x02
 #define bmSCROLLLOCK    0x04
 /**/
+/* flag of functiong buttion is press*/
+bool FLAG_SHIFT = false;
+bool FLAG_CTRL = false;
+bool FLAG_ALT = false;
+bool FLAG_GUI = false;
+int FUNPS2CODE[8] = {0x14, 0x12, 0x11, 0x1F, 0x14, 0x59, 0x11, 0x27};
+
 EP_RECORD ep_record[ 2 ];  //endpoint record structure for the keyboard
 
-char buf[ 8 ] = { 0 };      //keyboard buffer
+char new_buf[ 8 ] = { 0 };      //keyboard buffer
 char old_buf[ 8 ] = { 0 };  //last poll
 /* Sticky key state */
 bool numLock = false;
@@ -134,84 +141,219 @@ void kbd_poll( void )
   boolean samemark = true;
   static char leds = 0;
   byte rcode = 0;     //return code
+  byte usb_data;
   /* poll keyboard */
-  rcode = Usb.inTransfer( KBD_ADDR, KBD_EP, 8, buf );
+  rcode = Usb.inTransfer( KBD_ADDR, KBD_EP, 8, new_buf );
   if ( rcode != 0 ) {
     return;
   }//if ( rcode..
+//  if (new_buf[0] != old_buf[0])
+//  {
+//    Ps2FunButtonPress(new_buf[0]);
+//    Ps2FunButtonRelease(new_buf[0]);
+//  }
+
+  for (int i = 0; i < 8; i++) {
+    if (((new_buf[0] >> i) & 1) != ((old_buf[0] >> i) & 1)) {
+      if  ((new_buf[0] >> i) & 1) {
+        usb_data = FUNPS2CODE[i];
+        Serial.println(usb_data, HEX);
+        if ((i == 0) || (i == 1) || (i == 2) || (i == 5)) {
+          fid_ps2h_write(usb_data);
+        } else {
+          fid_ps2h_write(0xE0);
+          fid_ps2h_write(usb_data);
+        }
+      } else {
+        usb_data = FUNPS2CODE[i];
+        
+        if ((i == 0) || (i == 1) || (i == 2) || (i == 5)) {
+          fid_ps2h_write(0xF0);
+          fid_ps2h_write(usb_data);
+        } else {
+          fid_ps2h_write(0xE0);
+          fid_ps2h_write(0xF0);
+          fid_ps2h_write(usb_data);
+        }
+      }
+    }
+  }
 
   for ( i = 2; i < 8; i++ ) {
-    if ( buf[ i ] == 0 ) { //end of non-empty space
-      break;
-    }
-    if ( buf_compare( buf[ i ] ) == false ) {  //if new key
-      switch ( buf[ i ] ) {
+    //    if ( new_buf[ i ] == 0 ) { //end of non-empty space
+    //      break;
+    //    }
+    if ( buf_compare_with_old( new_buf[ i ] ) == false ) {  //if new key
+      switch ( new_buf[ i ] ) {
         case CAPSLOCK:
           capsLock = ! capsLock;
           leds = ( capsLock ) ? leds |= bmCAPSLOCK : leds &= ~bmCAPSLOCK;       // set or clear bit 1 of LED report byte
-          sendToPs2(buf[ i ], buf[ 0 ]);
+          Ps2ButtonPress(new_buf[ i ]);
+          //sendToPs2(new_buf[ i ], new_buf[ 0 ]);
           break;
         case NUMLOCK:
           numLock = ! numLock;
           leds = ( numLock ) ? leds |= bmNUMLOCK : leds &= ~bmNUMLOCK;           // set or clear bit 0 of LED report byte
-          sendToPs2(buf[ i ], buf[ 0 ]);
+          Ps2ButtonPress(new_buf[ i ]);
+          //sendToPs2(new_buf[ i ], new_buf[ 0 ]);
           break;
         case SCROLLLOCK:
           scrollLock = ! scrollLock;
           leds = ( scrollLock ) ? leds |= bmSCROLLLOCK : leds &= ~bmSCROLLLOCK;   // set or clear bit 2 of LED report byte
-          sendToPs2(buf[ i ], buf[ 0 ]);
+          Ps2ButtonPress(new_buf[ i ]);
+          //sendToPs2(new_buf[ i ], new_buf[ 0 ]);
           break;
         case DELETE:
           line = false;
-          sendToPs2(buf[ i ], buf[ 0 ]);
+          Ps2ButtonPress(new_buf[ i ]);
+          //sendToPs2(new_buf[ i ], new_buf[ 0 ]);
           break;
         case RETURN:
           line = ! line;
-          sendToPs2(buf[ i ], buf[ 0 ]);
+          Ps2ButtonPress(new_buf[ i ]);
+          //sendToPs2(new_buf[ i ], new_buf[ 0 ]);
           break;
         default:
-          sendToPs2(buf[ i ], buf[ 0 ]);
-          
-          //          sendToPs2(buf[ i ]);
-
-          break;
-          //default:
-          //Serial.print(HIDtoA( buf[ i ], buf[ 0 ] ));
-          //  break;
-      }//switch( buf[ i ...
+          Ps2ButtonPress(new_buf[ i ]);
+          //sendToPs2(new_buf[ i ], new_buf[ 0 ]);
+      }//switch( new_buf[ i ...
 
       rcode = Usb.setReport( KBD_ADDR, 0, 1, KBD_IF, 0x02, 0, &leds );
       if ( rcode ) {
         Serial.print("Set report error: ");
         Serial.println( rcode, HEX );
       }//if( rcode ...
-    }//if( buf_compare( buf[ i ] ) == false ...
-  }//for( i = 2...
-  /*
-    i = 0;
-    while (i < 8)
-    {
-      if (old_buf[i] != buf[i]) {
-        i = 12;
-      }
-      i++;
+    }//if( buf_compare( new_buf[ i ] ) == false ...
+
+    if ( buf_compare_with_new( old_buf[ i ] ) == false ) {  //if reles key
+      Ps2ButtonRelease(old_buf[ i ]);
     }
-  */
-  //  char j;
-  //  for ( i = 0; i < 8; i++ ) {
-  //    if ( buf_compare( buf[ i ] ) == false ) {
-  //      for ( j = 0; j < 8; j++ ) {
-  //        sendToPs2(buf[ i ]);
-  //        Serial.print( buf[ j ], HEX);
-  //        Serial.print(" ");
-  //        //old_buf[ j ] = buf[ j ];
-  //      }//for( j = ...
-  //      Serial.println("");
-  //    }//if( buf...
-  //  }
+  }//for( i = 2...
+
   for ( i = 0; i < 8; i++ ) {                   //copy new buffer to old
-    old_buf[ i ] = buf[ i ];
+    old_buf[ i ] = new_buf[ i ];
   }
+}
+
+void Ps2FunButtonPress(byte mod)
+{
+  Serial.println(mod, HEX);
+  Serial.println(" ");
+  Serial.println((mod & SHIFT) == true);
+  if ((mod & SHIFT) && (FLAG_SHIFT == false)) {
+    Serial.println("shift");
+    FLAG_SHIFT = true;
+    fid_ps2h_write(0x12); //0x12: Left shift scan code
+  }
+  if ((mod & CTRL) && (FLAG_CTRL == false)) {
+    FLAG_CTRL == true;
+    fid_ps2h_write(0x14); //0x14: Left control scan code
+  }
+  if ((mod & ALT) && (FLAG_ALT == false)) {
+    FLAG_ALT == true;
+    fid_ps2h_write(0x11); //0x11: Left Alt scan code
+  }
+  if ((mod & GUI) && (FLAG_GUI == false)) {
+    FLAG_GUI == true;
+    fid_ps2h_write(0xE0);
+    fid_ps2h_write(0x1F); //0x1F: Left GUI scan code
+  }
+}
+
+void Ps2FunButtonRelease(byte mod)
+{
+  Serial.println(mod, HEX);
+  Serial.println(" ");
+
+  if ((FLAG_GUI == true) && (mod & GUI == false)) {
+    FLAG_GUI == false;
+    fid_ps2h_write(0xE0);
+    fid_ps2h_write(0xF0);
+    fid_ps2h_write(0x1F); //0x1F: Left GUI scan code
+  }
+  if ((FLAG_ALT == true) && (mod & ALT == false)) {
+    FLAG_ALT == false;
+    fid_ps2h_write(0xF0);
+    fid_ps2h_write(0x11); //0x14: Left control scan code
+  }
+  if ((FLAG_CTRL == true) && (mod & CTRL == false)) {
+    FLAG_CTRL == false;
+    fid_ps2h_write(0xF0);
+    fid_ps2h_write(0x14);
+  }
+  if ((FLAG_SHIFT == true) && ((mod & SHIFT) == false)) {
+    Serial.println("release shift");
+    FLAG_SHIFT == false;
+    fid_ps2h_write(0xF0);
+    fid_ps2h_write(0x12); //0x12: Left shift scan code
+  }
+}
+
+void Ps2ButtonPress(byte usb_data)
+{
+  uint8_t ps_data;
+  ps_data = K[usb_data];
+  Serial.println(ps_data, HEX);
+  Serial.println(" ");
+
+//  if (mod & SHIFT) {
+//    fid_ps2h_write(0x12); //0x12: Left shift scan code
+//  }
+//  if (mod & CTRL) {
+//    fid_ps2h_write(0x14); //0x14: Left control scan code
+//  }
+//  if (mod & ALT) {
+//    fid_ps2h_write(0x11); //0x11: Left Alt scan code
+//  }
+//  if (mod & GUI) {
+//    fid_ps2h_write(0xE0);
+//    fid_ps2h_write(0x1F); //0x1F: Left GUI scan code
+//  }
+
+  if ((usb_data >= 0x49 && usb_data <= 0x52) || usb_data == 0x54 || usb_data == 0x58 || usb_data == 0x65 || usb_data == 0x66)
+  {
+    fid_ps2h_write(0xE0);
+    fid_ps2h_write(ps_data);
+  } else {
+    fid_ps2h_write(ps_data);
+  }
+}
+
+void Ps2ButtonRelease(byte usb_data)
+{
+  uint8_t ps_data;
+  ps_data = K[usb_data];
+  Serial.println(ps_data, HEX);
+  Serial.println(" ");
+
+  if ((usb_data >= 0x49 && usb_data <= 0x52) || usb_data == 0x54 || usb_data == 0x58 || usb_data == 0x65 || usb_data == 0x66)
+  {
+    fid_ps2h_write(0xE0);
+    fid_ps2h_write(0xF0);
+    fid_ps2h_write(ps_data);
+  } else {
+    fid_ps2h_write(0xF0);
+    fid_ps2h_write(ps_data);
+  }
+
+//  if (mod & GUI) {
+//    fid_ps2h_write(0xE0);
+//    fid_ps2h_write(0xF0);
+//    fid_ps2h_write(0x1F); //0x1F: Left GUI scan code
+//  }
+//  if (mod & ALT) {
+//    fid_ps2h_write(0xF0);
+//    fid_ps2h_write(0x11); //0x14: Left control scan code
+//  }
+//  if (mod & CTRL) {
+//    fid_ps2h_write(0xF0);
+//    fid_ps2h_write(0x14);
+//  }
+//  if (mod & SHIFT) {
+//    fid_ps2h_write(0xF0);
+//    fid_ps2h_write(0x12); //0x12: Left shift scan code
+//  }
+
 }
 
 void sendToPs2(byte usb_data, byte mod)
@@ -264,38 +406,6 @@ void sendToPs2(byte usb_data, byte mod)
     fid_ps2h_write(0xF0);
     fid_ps2h_write(0x12); //0x12: Left shift scan code
   }
-  //  /* upper row of the keyboard, numbers and special symbols */
-  //  //number + shift
-  //  if (( data >= 0x1E && data <= 0x27) || (data >= 0x2D && data <= 0x31) || (data >= 0x33 && data <= 0x38)) {
-  //    if (mod & SHIFT) {   //shift key pressed
-  //      fid_ps2h_write(0x12); //Left Shift scan code set 2
-  //      un_function_press(ps_data);
-  //      fid_ps2h_write(0xF0);
-  //      fid_ps2h_write(0x12);
-  //    } else {
-  //      un_function_press(ps_data);
-  //    }
-  //  } else if (data >= 0x04 && data <= 0x1D) {//Letters a-z
-  //    if ((( capsLock == true ) && ( mod & SHIFT ) == 0 ) || (( capsLock == false ) && ( mod & SHIFT ))) { //upper case
-  //      fid_ps2h_write(0x12); //Left Shift scan code set 2
-  //      un_function_press(ps_data);
-  //      fid_ps2h_write(0xF0);
-  //      fid_ps2h_write(0x12);
-  //    } else {
-  //      un_function_press(ps_data);
-  //    }
-  //  } else if (data >= 0x53 && data <= 0x63) { //numLock(keypad) open or not
-  //    if (mod & numLock) { //numLock open
-  //      fid_ps2h_write(0x77); //Left Shift scan code set 2
-  //      un_function_press(ps_data);
-  //      fid_ps2h_write(0xF0);
-  //      fid_ps2h_write(0x77);
-  //    } else {
-  //      un_function_press(ps_data);
-  //    }
-  //  } else {
-  //    un_function_press(ps_data);
-  //  }
 }
 
 /*scan code has two format to unpress. input: ps2 set 2 scan code*/
@@ -321,11 +431,23 @@ void un_function_press(byte usb_data) {
 }
 
 /* compare byte against bytes in old buffer */
-bool buf_compare( byte data )
+bool buf_compare_with_old( byte data )
 {
   char i;
   for ( i = 2; i < 8; i++ ) {
     if ( old_buf[ i ] == data ) {
+      return ( true );
+    }
+  }
+  return ( false );
+}
+
+/* compare byte against bytes in new buffer */
+bool buf_compare_with_new( byte data )
+{
+  char i;
+  for ( i = 2; i < 8; i++ ) {
+    if ( new_buf[ i ] == data ) {
       return ( true );
     }
   }
